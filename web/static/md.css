@@ -1,0 +1,55 @@
+/* 配色は whiteboard の HTML と同じものを使う（並べて見ても違和感が無いように） */
+:root {
+  --bg: #f7f7f5; --panel: #fff; --ink: #1c1b19; --muted: #6b6864; --line: #e0ddd7;
+  --accent: #3b5bdb; --code-bg: #f0efec; --quote-bg: #fff;
+}
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg: #17181a; --panel: #1f2124; --ink: #e8e6e3; --muted: #9a9691; --line: #33363a;
+    --accent: #8ba4ff; --code-bg: #26282b; --quote-bg: #1f2124;
+  }
+}
+* { box-sizing: border-box; }
+body.markdown-body {
+  margin: 0 auto; padding: 32px 24px 80px; max-width: 900px;
+  background: var(--bg); color: var(--ink);
+  font-family: -apple-system, BlinkMacSystemFont, "Hiragino Sans", "Noto Sans JP", sans-serif;
+  font-size: 15px; line-height: 1.8; overflow-wrap: anywhere;
+}
+h1, h2, h3, h4, h5, h6 { line-height: 1.4; margin: 1.8em 0 .6em; }
+h1 { font-size: 26px; border-bottom: 2px solid var(--line); padding-bottom: .3em; margin-top: 0; }
+h2 { font-size: 21px; border-bottom: 1px solid var(--line); padding-bottom: .25em; }
+h3 { font-size: 17px; }
+h4, h5, h6 { font-size: 15px; }
+p, ul, ol, blockquote, table, pre { margin: 0 0 1em; }
+ul, ol { padding-left: 1.6em; }
+li { margin: .25em 0; }
+a { color: var(--accent); }
+hr { border: 0; border-top: 1px solid var(--line); margin: 2em 0; }
+blockquote {
+  border-left: 3px solid var(--line); background: var(--quote-bg);
+  margin-left: 0; padding: .5em 1em; color: var(--muted);
+}
+code {
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: .88em;
+  background: var(--code-bg); padding: .1em .35em; border-radius: 4px;
+}
+pre {
+  background: var(--code-bg); border: 1px solid var(--line); border-radius: 8px;
+  padding: 12px 14px; overflow-x: auto; line-height: 1.55;
+}
+/* chroma が持つ背景色は使わず、こちらの配色に合わせる */
+pre.chroma { background: var(--code-bg); }
+pre code, pre .chroma { background: none; padding: 0; font-size: 13px; }
+table { border-collapse: collapse; width: 100%; font-size: 14px; }
+th, td { border: 1px solid var(--line); padding: 6px 10px; text-align: left; vertical-align: top; }
+th { background: var(--code-bg); }
+td { background: var(--panel); }
+img { max-width: 100%; height: auto; }
+input[type="checkbox"] { margin-right: .4em; }
+
+/* mermaid の図。描画されるまでは原文が見えないようにする */
+pre.mermaid {
+  background: none; border: 0; padding: 0; text-align: center; color: transparent;
+}
+pre.mermaid svg { max-width: 100%; height: auto; }

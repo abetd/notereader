@@ -1,0 +1,135 @@
+:root {
+  --bg: #f7f7f5; --panel: #fff; --ink: #1c1b19; --muted: #6b6864; --line: #e0ddd7;
+  --accent: #3b5bdb; --accent-soft: #e8ecfd; --mark: #fff1a8;
+  --kind-html: #9a6b1f; --kind-md: #2f7d5d; --danger: #c92a2a;
+  --topbar-h: 52px;
+  --list-w: 400px;
+}
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg: #17181a; --panel: #1f2124; --ink: #e8e6e3; --muted: #9a9691; --line: #33363a;
+    --accent: #8ba4ff; --accent-soft: #232a3d; --mark: #5c4d12;
+    --kind-html: #d8a657; --kind-md: #6bc79b; --danger: #ff8787;
+  }
+}
+* { box-sizing: border-box; }
+html, body { height: 100%; }
+body {
+  margin: 0; background: var(--bg); color: var(--ink);
+  font-family: -apple-system, BlinkMacSystemFont, "Hiragino Sans", "Noto Sans JP", sans-serif;
+  font-size: 15px; line-height: 1.6;
+  display: grid; grid-template-rows: auto 1fr; height: 100vh; overflow: hidden;
+}
+input, select, button {
+  font: inherit; color: inherit; background: var(--panel);
+  border: 1px solid var(--line); border-radius: 8px; padding: 6px 10px;
+}
+button { cursor: pointer; font-size: 12px; padding: 4px 10px; }
+button:hover { border-color: var(--accent); color: var(--accent); }
+
+/* 上部の検索バー */
+.topbar {
+  display: flex; align-items: center; gap: 16px; flex-wrap: wrap;
+  padding: 8px 16px; background: var(--panel); border-bottom: 1px solid var(--line);
+}
+.topbar form { display: flex; gap: 8px; flex: 1; min-width: 280px; max-width: 760px; }
+#q { flex: 1; min-width: 0; font-size: 16px; padding: 7px 12px; }
+/* アーカイブを一覧に含めるか */
+.archive-toggle {
+  display: flex; align-items: center; gap: 5px; white-space: nowrap; cursor: pointer;
+  color: var(--muted); font-size: 12px;
+}
+.archive-toggle input { margin: 0; padding: 0; accent-color: var(--accent); cursor: pointer; }
+.topbar-meta { display: flex; align-items: center; gap: 12px; color: var(--muted); font-size: 12px; }
+/* 右上のお知らせ（同期中・失敗のときだけ出す）。長い理由は省略し、全文は title に置く */
+.notice { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 360px; }
+.notice.error { color: var(--danger); }
+
+/* キー操作のヘルプ（? をクリックで開く） */
+.help { position: relative; }
+.help summary {
+  list-style: none; cursor: pointer; width: 22px; height: 22px; border-radius: 50%;
+  border: 1px solid var(--line); display: grid; place-items: center; font-size: 12px;
+}
+.help summary::-webkit-details-marker { display: none; }
+.help[open] summary { border-color: var(--accent); color: var(--accent); }
+.help dl {
+  position: absolute; right: 0; top: 28px; z-index: 10; width: max-content;
+  display: grid; grid-template-columns: auto auto; gap: 4px 12px; margin: 0;
+  background: var(--panel); border: 1px solid var(--line); border-radius: 10px;
+  padding: 12px 14px; box-shadow: 0 8px 24px rgb(0 0 0 / 0.12);
+}
+.help dt { text-align: right; }
+.help dd { margin: 0; color: var(--ink); }
+kbd {
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 11px;
+  border: 1px solid var(--line); border-bottom-width: 2px; border-radius: 4px;
+  padding: 0 4px; margin: 0 1px; background: var(--bg);
+}
+
+/* 2 ペイン。狭い画面ではプレビューを畳んで一覧だけにする */
+main { display: grid; grid-template-columns: var(--list-w) 1fr; min-height: 0; }
+.pane-list { overflow-y: auto; border-right: 1px solid var(--line); }
+.pane-preview { display: grid; grid-template-rows: auto 1fr; min-width: 0; background: var(--panel); }
+@media (max-width: 860px) {
+  main { grid-template-columns: 1fr; }
+  .pane-preview { display: none; }
+}
+
+/* 結果一覧 */
+#results { list-style: none; margin: 0; padding: 0; }
+#results li {
+  padding: 7px 12px; border-bottom: 1px solid var(--line); cursor: pointer;
+  border-left: 3px solid transparent; scroll-margin: 8px 0;
+}
+#results li.sel { background: var(--accent-soft); border-left-color: var(--accent); }
+#results li .title {
+  font-weight: 600; font-size: 13.5px; line-height: 1.45; color: var(--ink);
+  display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; overflow: hidden;
+}
+#results li.sel .title { color: var(--accent); }
+#results li .snippet {
+  color: var(--muted); font-size: 12px; margin-top: 2px; line-height: 1.45;
+  display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; overflow: hidden;
+  overflow-wrap: anywhere;
+}
+.hit-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+.hit-head .when { color: var(--muted); font-size: 11px; white-space: nowrap; }
+#results li.sel .when { color: var(--accent); }
+.badge {
+  display: inline-block; font-size: 10.5px; font-weight: 600; letter-spacing: .02em;
+  color: var(--muted); background: var(--bg); border: 1px solid var(--line);
+  border-radius: 4px; padding: 0 5px; margin-bottom: 2px;
+}
+#results li.sel .badge { border-color: var(--accent); color: var(--accent); }
+/* ファイルの種別。ルート名のバッジの隣に出す */
+.hit-badges { display: flex; align-items: center; gap: 4px; min-width: 0; }
+.preview-title .badge + .badge { margin-left: -4px; }
+.badge.kind { font-size: 10px; letter-spacing: .04em; }
+.badge.kind-markdown { color: var(--kind-md); border-color: var(--kind-md); }
+.badge.kind-html { color: var(--kind-html); border-color: var(--kind-html); }
+#results li.sel .badge.kind-markdown { color: var(--kind-md); border-color: var(--kind-md); }
+#results li.sel .badge.kind-html { color: var(--kind-html); border-color: var(--kind-html); }
+/* アーカイブ内のファイル（アーカイブを含めたときだけ一覧に出る） */
+.badge.archived { border-style: dashed; }
+[hidden] { display: none !important; }
+mark { background: var(--mark); color: inherit; border-radius: 2px; padding: 0 1px; }
+
+/* プレビュー */
+.preview-head {
+  display: grid; grid-template-columns: 1fr auto; align-items: center; gap: 4px 12px;
+  padding: 10px 16px; border-bottom: 1px solid var(--line);
+}
+.preview-title { font-weight: 600; display: flex; align-items: center; gap: 8px; min-width: 0; }
+.preview-title #preview-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.preview-title .badge { margin: 0; }
+.preview-sub {
+  grid-column: 1; display: flex; gap: 12px; color: var(--muted); font-size: 12px; min-width: 0;
+}
+#preview-path { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+#preview-time { white-space: nowrap; }
+.preview-actions { grid-column: 2; grid-row: 1 / span 2; display: flex; gap: 8px; }
+#preview { border: 0; width: 100%; height: 100%; background: var(--panel); }
+#preview[hidden] { display: none; }
+
+.empty { color: var(--muted); font-size: 13px; text-align: center; padding: 40px 16px; margin: 0; }

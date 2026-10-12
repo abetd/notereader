@@ -1,0 +1,22 @@
+version: "2"
+
+linters:
+  # 既定（errcheck・govet・ineffassign・staticcheck・unused）に足す
+  enable:
+    - errorlint
+    - misspell
+    - modernize
+    - nilerr
+    - revive
+    - unparam
+  exclusions:
+    presets:
+      # 公開シンボルのコメントを必須にしない（revive の exported など）
+      - comments
+      # Close・Flush・os.Remove・fmt.Print などの戻り値は見ない
+      - std-error-handling
+
+formatters:
+  enable:
+    - gofmt
+    - goimports

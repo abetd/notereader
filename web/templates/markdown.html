@@ -1,0 +1,25 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>{{.Title}}</title>
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3E%3Ccircle cx='7' cy='7' r='4.5' fill='none' stroke='%233b5bdb' stroke-width='2'/%3E%3Cpath d='M10.5 10.5 L14 14' stroke='%233b5bdb' stroke-width='2' stroke-linecap='round'/%3E%3C/svg%3E">
+<!-- chroma は .chroma に背景色を持つので、こちらの配色を後から当てて上書きする -->
+<link rel="stylesheet" href="/static/chroma.css">
+<link rel="stylesheet" href="/static/md.css">
+</head>
+<body class="markdown-body">
+{{.Body}}
+{{if .HasMermaid}}
+<script src="/static/vendor/mermaid.min.js"></script>
+<script>
+  mermaid.initialize({
+    startOnLoad: true,
+    securityLevel: "strict",
+    theme: matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "default",
+  });
+</script>
+{{end}}
+</body>
+</html>

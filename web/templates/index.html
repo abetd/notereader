@@ -1,0 +1,71 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>notereader</title>
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3E%3Ccircle cx='7' cy='7' r='4.5' fill='none' stroke='%233b5bdb' stroke-width='2'/%3E%3Cpath d='M10.5 10.5 L14 14' stroke='%233b5bdb' stroke-width='2' stroke-linecap='round'/%3E%3C/svg%3E">
+<link rel="stylesheet" href="/static/style.css">
+</head>
+<body data-scope="{{.Scope}}">
+<header class="topbar">
+  <form id="form" role="search" onsubmit="return false">
+    <input id="q" type="search" placeholder="検索（空白区切りで AND）" autofocus autocomplete="off"
+           role="combobox" aria-controls="results" aria-expanded="true" aria-autocomplete="list">
+    <select id="scope" aria-label="対象のルート">
+      <option value="">すべて</option>
+    </select>
+    <select id="sort" aria-label="並び順">
+      <option value="mtime">更新日時順</option>
+      <option value="score">スコア順</option>
+    </select>
+    <label class="archive-toggle" title="アーカイブのディレクトリ（設定の archive、既定は archive/）にあるファイルも一覧に出す">
+      <input id="archive" type="checkbox">アーカイブも含める
+    </label>
+  </form>
+  <div class="topbar-meta">
+    <!-- 検索の失敗だけを出す -->
+    <span id="search-error" class="notice error" hidden></span>
+    <details id="help" class="help">
+      <summary title="キー操作">?</summary>
+      <dl>
+        <dt><kbd>↓</kbd><kbd>↑</kbd> / <kbd>Ctrl</kbd>+<kbd>N</kbd><kbd>P</kbd></dt><dd>結果を選ぶ</dd>
+        <dt><kbd>⌘</kbd>/<kbd>Ctrl</kbd>+<kbd>Enter</kbd></dt><dd>新しいタブで開く</dd>
+        <dt><kbd>Esc</kbd></dt><dd>検索語をクリア</dd>
+        <dt><kbd>/</kbd></dt><dd>検索欄へ</dd>
+      </dl>
+    </details>
+    <!-- 同期中と、状態の取得・同期の失敗だけを出す -->
+    <span id="status" class="notice" hidden></span>
+  </div>
+</header>
+
+<main>
+  <section class="pane-list" aria-label="検索結果">
+    <ol id="results" role="listbox" aria-label="検索結果"></ol>
+    <p id="empty" class="empty" hidden>該当なし</p>
+  </section>
+
+  <section class="pane-preview" aria-label="プレビュー">
+    <div id="preview-head" class="preview-head" hidden>
+      <div class="preview-title">
+        <span id="preview-badge" class="badge"></span>
+        <span id="preview-kind" class="badge kind"></span>
+        <span id="preview-archive" class="badge archived" hidden>アーカイブ</span>
+        <span id="preview-name"></span>
+      </div>
+      <div class="preview-sub">
+        <span id="preview-path"></span>
+        <span id="preview-time"></span>
+      </div>
+      <div class="preview-actions">
+        <button id="open-tab" type="button">新しいタブ</button>
+      </div>
+    </div>
+    <iframe id="preview" title="選択中のファイルのプレビュー"></iframe>
+    <p id="preview-empty" class="empty">左の結果を選ぶとここに表示されます</p>
+  </section>
+</main>
+<script src="/static/app.js"></script>
+</body>
+</html>

@@ -1,0 +1,47 @@
+# notereader の設定例
+# 既定の置き場所: ~/.config/notereader/config.yaml（--config で変更可）。notereader config init でこの内容を書き出せる
+
+# 待ち受けアドレス（省略時 127.0.0.1:8787。127.0.0.1・[::1]・localhost のループバックに限る）
+listen: 127.0.0.1:8787
+
+# インデックス・PID ファイル・ログの保存先（省略時 macOS: ~/Library/Caches/notereader、Linux: ~/.cache/notereader）
+# data_dir: ~/.cache/notereader
+
+# 監視対象ディレクトリ（再帰的に走査する。1 件以上必要）
+# name は URL とファイル ID に使うため、一度決めたら変えないこと（英数字・_・-）
+# notereader config add <name> <dir> で足すか、下の例を参考に書く。
+#
+#   - name: notes
+#     path: ~/notes
+#
+# 1 つの name に複数のディレクトリをまとめることもできる。
+# 相対パスの先頭にディレクトリを表す名前が付くので、同じ相対パスのファイルがあっても取り違えない。
+# 名前はパスの末尾から自動で決まり、重なる場合は区別できるまで親を足す。
+# ラベル無しで 1 件だけなら名前は付かない（path と同じ）。2 件目を足すと、そのルートのファイル ID と URL がすべて変わる。
+#
+#   - name: boards
+#     paths:
+#       - ~/projects/app/.scratch         # → app-scratch/...
+#       - ~/projects/dotfiles/.scratch    # → dotfiles-scratch/...
+#       - path: ~/projects/docs           # ラベルを明示することもできる
+#         label: docs
+roots:
+
+# ファイル監視（省略時 true）。false にすると起動時と手動の再インデックスでのみ更新する
+# watch: true
+
+# 取りこぼしの保険として行う定期照合の間隔（省略時 5m、"0" で行わない）
+# reconcile_interval: 5m
+
+# 追加の除外パターン（ディレクトリ名/ファイル名、またはディレクトリからの相対パスに対する glob。paths で付く名前は含めない）
+# .git・node_modules・.next・.venv・.env などは常に除外される（.scratch は対象）
+exclude:
+  - dist
+  - "*.bak.html"
+
+# アーカイブとみなすディレクトリ（ディレクトリ名、またはルートからの相対パスに対する glob。paths のルートでは付いた名前から書く）
+# アーカイブ内のファイルも索引に入り開けるが、検索画面の一覧には既定で出さない（「アーカイブも含める」で出す）
+# 省略時は [archive]（どの階層の archive/ も対象）。書くとその内容で置き換わり、[] で無効になる
+# archive:
+#   - archive
+#   - notes/old
