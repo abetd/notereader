@@ -144,7 +144,7 @@ function renderHit(h, i) {
   badge.textContent = h.root;
   const kind = document.createElement("span");
   kind.className = `badge kind kind-${h.type}`;
-  kind.textContent = kindLabel(h.type);
+  kind.textContent = kindLabel(h);
   const when = document.createElement("span");
   when.className = "when";
   const t = new Date(h.mtime);
@@ -173,8 +173,14 @@ function renderHit(h, i) {
 }
 
 const kindLabels = { html: "HTML", markdown: "MD" };
-function kindLabel(type) {
-  return kindLabels[type] ?? type;
+// コード（設定の code に書いた拡張子）は拡張子を大文字にして出す（main.go → GO）
+function kindLabel(h) {
+  if (h.type === "code") {
+    const name = h.rel_path.slice(h.rel_path.lastIndexOf("/") + 1);
+    const dot = name.lastIndexOf(".");
+    if (dot >= 0) return name.slice(dot + 1).toUpperCase();
+  }
+  return kindLabels[h.type] ?? h.type;
 }
 
 // urlNow: URL をすぐ書き換えるか（キー移動だけは間引く）
@@ -212,7 +218,7 @@ function showPreview(h) {
   $("preview-empty").hidden = true;
   $("preview-badge").textContent = h.root;
   const pk = $("preview-kind");
-  pk.textContent = kindLabel(h.type);
+  pk.textContent = kindLabel(h);
   pk.className = `badge kind kind-${h.type}`;
   $("preview-archive").hidden = !h.archived;
   $("preview-name").textContent = h.title;

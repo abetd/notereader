@@ -59,6 +59,7 @@ type showConfig struct {
 	Roots             []showRoot `yaml:"roots"`
 	Exclude           []string   `yaml:"exclude,omitempty"`
 	Archive           []string   `yaml:"archive"`
+	Code              []string   `yaml:"code,omitempty"`
 }
 
 type showRoot struct {
@@ -88,6 +89,7 @@ func (c *ConfigShowCmd) Run(cli *CLI) error {
 		ReconcileInterval: cfg.ReconcileInterval().String(),
 		Exclude:           cfg.Exclude,
 		Archive:           cfg.Archive,
+		Code:              cfg.Code,
 	}
 	for _, r := range cfg.Roots {
 		sr := showRoot{Name: r.Name}

@@ -8,7 +8,7 @@
 - `internal/daemon/`: バックグラウンド起動・停止。PID ファイル（`notereader.pid`）とログ（`notereader.log`、1 世代を `.1` に回す）は `data_dir` 配下。status・reindex が動いているサーバーに問い合わせる処理もここ
 - `internal/config/`: 設定の読み込みと検証（アーカイブの判定と、bleve 用の正規表現の組み立てもここ）。`LoadRuntime` は `listen` と `data_dir` だけを読む（roots が壊れていても stop / status できるように）。`edit.go` が config add / remove の書き戻し（yaml.v3 の Node でコメントを保つ）
 - `internal/config/config.example.yaml`: `config init` の雛形。`internal/config/example.go` で埋め込み、そのまま書き出す
-- それ以外（indexer・search・server・watcher・extract・markdown・web）は README の「開発」を参照
+- それ以外（indexer・search・server・watcher・extract・highlight・markdown・web）は README の「開発」を参照
 
 ## 決めてあること
 
@@ -24,6 +24,8 @@
 - アーカイブに移すとファイル ID が変わり、古い `/view/{id}` は 404 になる。移動先を追いかける仕組みは持たない
 - `exclude` の相対パスは各ディレクトリから数え（`paths` で付く名前を含めない。索引・監視・`/files` の配信で揃える）、`archive` はルートから数える（付いた名前を含む。ラベルが `archive` のディレクトリを丸ごとアーカイブにできるように）
 - `listen` はループバックに限る。検証は `Config.normalize` だけで、`LoadRuntime` では見ない（stop・status は listen が何でも動くように）。Host ヘッダの検査は DNS リバインディング対策で、LAN から直接つながれるのは防げないため
+- HTML / Markdown 以外のテキストファイルのコード表示は、`/files` へのリクエストの `Sec-Fetch-Dest` が `document` / `iframe` のときだけ返す（`.scratch/notereader-code-view.html` に経緯）。`/files` は HTML から読み込まれる CSS・JS・`fetch` も配信しているので、拡張子で決めるとその読み込みが壊れる。同じ URL でも返すものが変わるので `Vary: Sec-Fetch-Dest` を消さない
+- コードを索引に入れるかは設定の `code` に書いた拡張子で決め（既定は空）、表示するかは中身（NUL を含まない・UTF-8）で決める。索引まで中身で決めると、HTML の付属ファイル（CSS・JS・SVG）や lock ファイルで一覧が埋まる。SVG（`image/*`）は画像のまま返す
 - 抽出の仕方（`internal/extract`）を変えたら `indexer.SchemaVersion` を上げる。差分同期は署名が同じファイルを抽出し直さないので、上げないと既存の索引に反映されない
 
 ## 変更したら揃えるもの

@@ -53,3 +53,9 @@ pre.mermaid {
   background: none; border: 0; padding: 0; text-align: center; color: transparent;
 }
 pre.mermaid svg { max-width: 100%; height: auto; }
+
+/* コード表示（code.html）。1 ファイル丸ごとを幅いっぱいに出す。長い行は折り返さず横スクロール */
+body.code-body {
+  margin: 0; padding: 16px; background: var(--bg); color: var(--ink);
+}
+body.code-body pre { margin: 0; }

@@ -4,6 +4,7 @@ import (
 	"os"
 	"path/filepath"
 	"regexp"
+	"slices"
 	"strings"
 	"testing"
 )
@@ -36,10 +37,48 @@ func TestParseErrors(t *testing.T) {
 		"ループバック以外の listen":      "listen: 0.0.0.0:8787\nroots:\n  - name: a\n    path: " + dir + "\n",
 		"ホストの無い listen":         "listen: :8787\nroots:\n  - name: a\n    path: " + dir + "\n",
 		"別のルートに同じパス":            "roots:\n  - name: a\n    path: " + dir + "\n  - name: b\n    path: " + dir + "\n",
+		"code に Markdown":       "roots:\n  - name: a\n    path: " + dir + "\ncode: [.md]\n",
+		"code にパス":              "roots:\n  - name: a\n    path: " + dir + "\ncode: [Makefile.d/x]\n",
+		"code に二重の拡張子":          "roots:\n  - name: a\n    path: " + dir + "\ncode: [.d.ts]\n",
+		"code に空":               "roots:\n  - name: a\n    path: " + dir + "\ncode: ['']\n",
 	} {
 		if _, err := Parse([]byte(src)); err == nil {
 			t.Errorf("%s: エラーにならない", name)
 		}
+	}
+}
+
+func TestCode(t *testing.T) {
+	dir := t.TempDir()
+	cfg, err := Parse([]byte("roots:\n  - name: a\n    path: " + dir + "\ncode: [.go, sh, .YAML, go]\n"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if want := []string{".go", ".sh", ".yaml"}; !slices.Equal(cfg.Code, want) {
+		t.Errorf("Code = %q, want %q", cfg.Code, want)
+	}
+	for path, want := range map[string]bool{
+		"main.go":         true,
+		"dir/run.SH":      true,
+		"conf.yaml":       true,
+		"conf.yml":        false,
+		"Makefile":        false,
+		"note.md":         false,
+		"dir.go/readme":   false,
+		"archive/main.go": true,
+	} {
+		if got := cfg.IsCode(path); got != want {
+			t.Errorf("IsCode(%q) = %v, want %v", path, got, want)
+		}
+	}
+
+	// 省略時は空（HTML / Markdown だけ）
+	cfg, err = Parse([]byte("roots:\n  - name: a\n    path: " + dir + "\n"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(cfg.Code) != 0 || cfg.IsCode("main.go") {
+		t.Errorf("Code = %q", cfg.Code)
 	}
 }
 

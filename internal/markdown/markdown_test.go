@@ -79,20 +79,3 @@ func TestCodeAndMermaid(t *testing.T) {
 		t.Error("HasMermaid = false")
 	}
 }
-
-func TestStyleCSS(t *testing.T) {
-	css, err := StyleCSS()
-	if err != nil {
-		t.Fatal(err)
-	}
-	if !strings.Contains(css, ".chroma") || !strings.Contains(css, "prefers-color-scheme: dark") {
-		t.Errorf("CSS = %.200s", css)
-	}
-	// ダーク側に無いトークンは文字色を戻す（ライトの濃い色が残ると背景に沈む）
-	light, dark, _ := strings.Cut(css, "@media")
-	for _, m := range tokenClass.FindAllStringSubmatch(light, -1) {
-		if !strings.Contains(dark, ".chroma ."+m[1]+" ") && !strings.Contains(dark, ".chroma ."+m[1]+"{") {
-			t.Errorf("ダークに %s の指定が無い", m[1])
-		}
-	}
-}

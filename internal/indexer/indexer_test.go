@@ -117,3 +117,43 @@ func TestOpenChecksMeta(t *testing.T) {
 		t.Errorf("作り直した後の meta.json: %v", err)
 	}
 }
+
+// 設定の code に書いた拡張子だけをコードとして索引に入れ、外せば次の同期で消える
+func TestSyncCode(t *testing.T) {
+	root := t.TempDir()
+	mustWrite(t, filepath.Join(root, "a.html"), "<p>a</p>")
+	mustWrite(t, filepath.Join(root, "main.go"), "package main\n")
+	mustWrite(t, filepath.Join(root, "run.SH"), "echo hi\n")
+	mustWrite(t, filepath.Join(root, "app.log"), "log\n")
+	dataDir := t.TempDir()
+	parse := func(extra string) *config.Config {
+		cfg, err := config.Parse([]byte("data_dir: " + dataDir + "\nroots:\n  - name: notes\n    path: " + root + "\n" + extra))
+		if err != nil {
+			t.Fatal(err)
+		}
+		return cfg
+	}
+
+	x, err := Open(parse("code: [go, .sh]\n"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := x.Sync(t.Context()); err != nil {
+		t.Fatal(err)
+	}
+	for rel, want := range map[string]bool{"a.html": true, "main.go": true, "run.SH": true, "app.log": false} {
+		if _, _, ok, err := x.Lookup(DocID("notes", rel)); err != nil || ok != want {
+			t.Errorf("%s: 索引にある = %v, want %v (err = %v)", rel, ok, want, err)
+		}
+	}
+	x.Close()
+
+	x, err = Open(parse(""))
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { x.Close() })
+	if res, err := x.Sync(t.Context()); err != nil || res.Deleted != 2 {
+		t.Errorf("code を外しても消えない: res = %+v, err = %v", res, err)
+	}
+}

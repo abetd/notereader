@@ -2,6 +2,7 @@
 package server
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"errors"
@@ -9,6 +10,7 @@ import (
 	"io"
 	"io/fs"
 	"log/slog"
+	"mime"
 	"net"
 	"net/http"
 	"net/url"
@@ -17,9 +19,11 @@ import (
 	"strconv"
 	"strings"
 	"time"
+	"unicode/utf8"
 
 	"github.com/abetd/notereader/internal/config"
 	"github.com/abetd/notereader/internal/extract"
+	"github.com/abetd/notereader/internal/highlight"
 	"github.com/abetd/notereader/internal/indexer"
 	"github.com/abetd/notereader/internal/markdown"
 	"github.com/abetd/notereader/internal/search"
@@ -60,7 +64,7 @@ func New(ctx context.Context, cfg *config.Config, index *indexer.Index) (*Server
 	if err != nil {
 		return nil, err
 	}
-	chromaCSS, err := markdown.StyleCSS()
+	chromaCSS, err := highlight.StyleCSS()
 	if err != nil {
 		return nil, err
 	}
@@ -290,12 +294,113 @@ func (s *Server) handleFile(w http.ResponseWriter, r *http.Request) {
 		http.NotFound(w, r)
 		return
 	}
+	raw := r.URL.Query().Get("raw") != ""
 	// Markdown は HTML に変換して返す（?raw=1 なら元のまま）
-	if extract.IsMarkdown(rel) && r.URL.Query().Get("raw") == "" {
+	if extract.IsMarkdown(rel) && !raw {
 		s.serveMarkdown(w, f, rel)
 		return
 	}
+	// それ以外のテキストファイルは、ページとして開かれたときだけコード表示にする（?raw=1 なら元のまま）
+	if codeCandidate(rel) {
+		w.Header().Add("Vary", "Sec-Fetch-Dest")
+		if !raw && openedAsPage(r) {
+			served, err := s.serveCode(w, r, f, rel)
+			if err != nil {
+				writeError(w, err)
+				return
+			}
+			if served {
+				return
+			}
+		}
+	}
 	http.ServeContent(w, r, path.Base(rel), info.ModTime(), f)
+}
+
+// codeCandidate はコード表示にしうるファイルかを返す。
+// HTML / Markdown と、拡張子から見て image/* のものは除く（中身がテキストの SVG を画像のまま返すため）。
+func codeCandidate(rel string) bool {
+	if _, ok := extract.For(rel); ok {
+		return false
+	}
+	return !strings.HasPrefix(mime.TypeByExtension(path.Ext(rel)), "image/")
+}
+
+// openedAsPage は、ページとして（新しいタブ・プレビューの iframe で）開かれたかを返す。
+// HTML から読み込まれる CSS・JS・fetch と、Sec-Fetch-Dest を付けないクライアント（curl など）では false。
+// 元のまま返して、HTML の読み込みを壊さないため。
+func openedAsPage(r *http.Request) bool {
+	switch r.Header.Get("Sec-Fetch-Dest") {
+	case "document", "iframe":
+		return true
+	}
+	return false
+}
+
+// sniffLen はテキストかどうかを判定するために読む先頭の長さ。
+const sniffLen = 8 << 10
+
+// serveCode は中身がテキストならコード表示を返して true を返す。
+// テキストでなければ何も書かずに読み位置を先頭に戻し、false を返す（呼び出し側が元のまま返す）。
+// 本文はページの前後の間に流し込む（大きなファイルをまるごとメモリに載せないため）。
+// 書き始めた後の失敗は 500 にできないので、ログに残してそこで終える。
+func (s *Server) serveCode(w http.ResponseWriter, r *http.Request, f *os.File, rel string) (bool, error) {
+	head := make([]byte, sniffLen)
+	n, err := io.ReadFull(f, head)
+	if err != nil && !errors.Is(err, io.EOF) && !errors.Is(err, io.ErrUnexpectedEOF) {
+		return false, err
+	}
+	head = head[:n]
+	if !isText(head, n < sniffLen) {
+		_, err := f.Seek(0, io.SeekStart)
+		return false, err
+	}
+	w.Header().Set("Content-Type", "text/html; charset=utf-8")
+	// タイトルは索引と同じく、ディレクトリからのパス（rel は複数ディレクトリのルートのプレフィックスを外した後）
+	if err := s.tmpl.ExecuteTemplate(w, "code-head", codePage{Title: rel}); err != nil {
+		logCodeError(r, rel, "head", err)
+		return true, nil
+	}
+	if err := highlight.File(w, path.Base(rel), io.MultiReader(bytes.NewReader(head), f)); err != nil {
+		logCodeError(r, rel, "body", err)
+		return true, nil
+	}
+	if err := s.tmpl.ExecuteTemplate(w, "code-foot", nil); err != nil {
+		logCodeError(r, rel, "foot", err)
+	}
+	return true, nil
+}
+
+// logCodeError はコード表示の途中の失敗をログに残す。stage はどこまで書いたか（head・body・foot）。
+// ブラウザが接続を切った（プレビューで別のファイルに移った など）ための書き込みの失敗は、よくあることなので残さない。
+func logCodeError(r *http.Request, rel, stage string, err error) {
+	if r.Context().Err() != nil {
+		return
+	}
+	slog.Error("コードの描画に失敗しました", "path", rel, "stage", stage, "err", err)
+}
+
+type codePage struct {
+	Title string
+}
+
+// isText は先頭 b がテキストか（NUL を含まず、UTF-8 として読めるか）を返す。
+// whole が false（ファイルの途中まで）のときは、末尾で切れた文字を見ない。
+func isText(b []byte, whole bool) bool {
+	if bytes.IndexByte(b, 0) >= 0 {
+		return false
+	}
+	if !whole {
+		for i := len(b) - 1; i >= 0 && i >= len(b)-utf8.UTFMax; i-- {
+			if utf8.RuneStart(b[i]) {
+				if !utf8.FullRune(b[i:]) {
+					b = b[:i]
+				}
+				break
+			}
+		}
+	}
+	return utf8.Valid(b)
 }
 
 type markdownPage struct {

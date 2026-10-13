@@ -1,5 +1,6 @@
 // Package extract はファイルから検索用のタイトルと本文を取り出す。
-// 形式（HTML・Markdown）ごとに Extractor を実装し、拡張子で振り分ける。
+// 形式（HTML・Markdown・コード）ごとに Extractor を実装する。HTML・Markdown は拡張子で For が振り分け、
+// コード（Code）は設定の code に書いた拡張子に indexer が当てる。
 package extract
 
 import (

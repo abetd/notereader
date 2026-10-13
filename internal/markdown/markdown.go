@@ -1,20 +1,14 @@
 // Package markdown は Markdown を HTML に変換する。
 //
-// コードブロックは chroma でサーバー側ハイライトし、mermaid のブロックだけは
+// コードブロックは chroma でサーバー側ハイライトし（internal/highlight）、mermaid のブロックだけは
 // そのままの内容を <pre class="mermaid"> として出す（描画はブラウザ側の mermaid.js）。
 package markdown
 
 import (
 	"bytes"
 	"html/template"
-	"regexp"
-	"sort"
 	"strings"
 
-	"github.com/alecthomas/chroma/v2"
-	chromahtml "github.com/alecthomas/chroma/v2/formatters/html"
-	"github.com/alecthomas/chroma/v2/lexers"
-	"github.com/alecthomas/chroma/v2/styles"
 	"github.com/yuin/goldmark"
 	"github.com/yuin/goldmark/ast"
 	"github.com/yuin/goldmark/extension"
@@ -24,17 +18,12 @@ import (
 	"github.com/yuin/goldmark/text"
 	"github.com/yuin/goldmark/util"
 	"gopkg.in/yaml.v3"
+
+	"github.com/abetd/notereader/internal/highlight"
 )
 
 // MermaidLang は mermaid として扱う言語名。
 const MermaidLang = "mermaid"
-
-// chroma のクラス名で色を当てる（配色はライト・ダークの 2 つを CSS で出し分ける）
-var (
-	formatter  = chromahtml.New(chromahtml.WithClasses(true), chromahtml.WithLineNumbers(false))
-	lightStyle = styles.Get("github")
-	darkStyle  = styles.Get("github-dark")
-)
 
 var md = goldmark.New(
 	goldmark.WithExtensions(extension.GFM, extension.Footnote, extension.DefinitionList),
@@ -73,58 +62,6 @@ func Render(src []byte) (Document, error) {
 		HTML:       out.Bytes(),
 		HasMermaid: bytes.Contains(out.Bytes(), []byte(`<pre class="mermaid">`)),
 	}, nil
-}
-
-// StyleCSS は chroma の配色を CSS で返す。ダークモードはメディアクエリで出し分ける。
-func StyleCSS() (string, error) {
-	light, err := styleCSS(lightStyle)
-	if err != nil {
-		return "", err
-	}
-	dark, err := styleCSS(darkStyle)
-	if err != nil {
-		return "", err
-	}
-
-	var b strings.Builder
-	b.WriteString(light)
-	b.WriteString("\n@media (prefers-color-scheme: dark) {\n")
-	b.WriteString(dark)
-	// ダーク側で定義されていないトークンは、ライトの色が残って背景に沈む。
-	// その分だけ既定の文字色に戻す
-	for _, class := range missingClasses(light, dark) {
-		b.WriteString(".chroma ." + class + " { color: inherit; background-color: transparent; }\n")
-	}
-	b.WriteString("}\n")
-	return b.String(), nil
-}
-
-func styleCSS(style *chroma.Style) (string, error) {
-	var b strings.Builder
-	if err := formatter.WriteCSS(&b, style); err != nil {
-		return "", err
-	}
-	return b.String(), nil
-}
-
-var tokenClass = regexp.MustCompile(`\.chroma \.([\w-]+)`)
-
-// missingClasses は light にあって dark に無いトークンのクラス名を返す。
-func missingClasses(light, dark string) []string {
-	inDark := make(map[string]bool)
-	for _, m := range tokenClass.FindAllStringSubmatch(dark, -1) {
-		inDark[m[1]] = true
-	}
-	seen := make(map[string]bool)
-	var out []string
-	for _, m := range tokenClass.FindAllStringSubmatch(light, -1) {
-		if !inDark[m[1]] && !seen[m[1]] {
-			seen[m[1]] = true
-			out = append(out, m[1])
-		}
-	}
-	sort.Strings(out)
-	return out
 }
 
 // splitFrontMatter は YAML frontmatter を取り除き、本文と title を返す。
@@ -192,15 +129,7 @@ func (r *codeRenderer) renderFenced(w util.BufWriter, src []byte, node ast.Node,
 		return ast.WalkSkipChildren, nil
 	}
 
-	lexer := lexers.Get(lang)
-	if lexer == nil {
-		lexer = lexers.Fallback
-	}
-	iter, err := chroma.Coalesce(lexer).Tokenise(nil, string(code))
-	if err != nil {
-		return ast.WalkStop, err
-	}
-	if err := formatter.Format(w, lightStyle, iter); err != nil {
+	if err := highlight.Code(w, lang, string(code)); err != nil {
 		return ast.WalkStop, err
 	}
 	return ast.WalkSkipChildren, nil

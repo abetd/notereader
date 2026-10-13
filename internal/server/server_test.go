@@ -11,6 +11,7 @@ import (
 	"testing"
 
 	"github.com/abetd/notereader/internal/config"
+	"github.com/abetd/notereader/internal/highlight"
 	"github.com/abetd/notereader/internal/indexer"
 )
 
@@ -309,6 +310,198 @@ func TestServeMarkdown(t *testing.T) {
 	css := get(s, "localhost:8787", "/static/chroma.css")
 	if css.Code != http.StatusOK || !strings.Contains(css.Body.String(), ".chroma") {
 		t.Errorf("chroma.css: code = %d", css.Code)
+	}
+}
+
+func TestServeCode(t *testing.T) {
+	root := t.TempDir()
+	mustWrite(t, filepath.Join(root, "PROJ-1", "main.go"), "package main\n\nfunc Hello() {}\n")
+	mustWrite(t, filepath.Join(root, "run.sh"), "echo <hi>\n")
+	mustWrite(t, filepath.Join(root, "style.css"), "body{}")
+	mustWrite(t, filepath.Join(root, "icon.svg"), `<svg xmlns="http://www.w3.org/2000/svg"></svg>`)
+	mustWrite(t, filepath.Join(root, "data.bin"), "abc\x00def")
+	mustWrite(t, filepath.Join(root, "latin1.txt"), "caf\xe9")
+	mustWrite(t, filepath.Join(root, "page.html"), "<p>page</p>")
+	// 先頭の判定（8 KB）を超えるもの、色を付ける上限（1 MB）を超えるもの
+	mid := "package main\n" + strings.Repeat("// x\n", 4<<10) + "func Mid() {}\n"
+	mustWrite(t, filepath.Join(root, "mid.go"), mid)
+	big := "package main\n" + strings.Repeat("// <x>\n", highlight.MaxColorSize/7+1) + "func Big() {}\n"
+	mustWrite(t, filepath.Join(root, "big.go"), big)
+
+	cfg, err := config.Parse([]byte("data_dir: " + t.TempDir() + "\nroots:\n  - name: notes\n    path: " + root + "\ncode: [go]\n"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	idx, err := indexer.Open(cfg)
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { idx.Close() })
+	if _, err := idx.Sync(context.Background()); err != nil {
+		t.Fatal(err)
+	}
+	s, err := New(context.Background(), cfg, idx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(s.Close)
+
+	fetch := func(target, dest string) *httptest.ResponseRecorder {
+		req := httptest.NewRequest(http.MethodGet, target, nil)
+		req.Host = "localhost:8787"
+		if dest != "" {
+			req.Header.Set("Sec-Fetch-Dest", dest)
+		}
+		rec := httptest.NewRecorder()
+		s.ServeHTTP(rec, req)
+		return rec
+	}
+	isCode := func(rec *httptest.ResponseRecorder) bool {
+		return strings.HasPrefix(rec.Header().Get("Content-Type"), "text/html") && strings.Contains(rec.Body.String(), `<pre class="chroma">`)
+	}
+
+	for name, tt := range map[string]struct {
+		target, dest string
+		code         bool
+	}{
+		"新しいタブ":              {"/files/notes/PROJ-1/main.go", "document", true},
+		"プレビューの iframe":      {"/files/notes/PROJ-1/main.go", "iframe", true},
+		"索引の対象外でもテキストなら":     {"/files/notes/run.sh", "document", true},
+		"HTML から読み込まれる CSS":  {"/files/notes/style.css", "style", false},
+		"fetch":              {"/files/notes/PROJ-1/main.go", "empty", false},
+		"Sec-Fetch-Dest が無い": {"/files/notes/PROJ-1/main.go", "", false},
+		"?raw=1":             {"/files/notes/PROJ-1/main.go?raw=1", "document", false},
+		"SVG は画像のまま":         {"/files/notes/icon.svg", "document", false},
+		"NUL を含む":            {"/files/notes/data.bin", "document", false},
+		"UTF-8 でない":          {"/files/notes/latin1.txt", "document", false},
+		"HTML はそのまま":         {"/files/notes/page.html", "document", false},
+	} {
+		rec := fetch(tt.target, tt.dest)
+		if rec.Code != http.StatusOK {
+			t.Errorf("%s: code = %d", name, rec.Code)
+			continue
+		}
+		if got := isCode(rec); got != tt.code {
+			t.Errorf("%s: コード表示 = %v, want %v (type = %q)", name, got, tt.code, rec.Header().Get("Content-Type"))
+		}
+	}
+
+	// コード表示の中身: ディレクトリからのパスがタイトル、色付き、エスケープ済み
+	body := fetch("/files/notes/PROJ-1/main.go", "document").Body.String()
+	for _, want := range []string{"<title>PROJ-1/main.go</title>", "/static/chroma.css", `<span class="kd">func</span>`} {
+		if !strings.Contains(body, want) {
+			t.Errorf("%q が無い: %s", want, body)
+		}
+	}
+	if b := fetch("/files/notes/run.sh", "document").Body.String(); strings.Contains(b, "<hi>") {
+		t.Errorf("エスケープされていない: %s", b)
+	}
+	// 8 KB を超えるものも最後まで色付きで出す
+	if b := fetch("/files/notes/mid.go", "document").Body.String(); !strings.Contains(b, `<span class="nf">Mid</span>`) {
+		t.Errorf("mid.go の末尾が色付きで出ていない: %.200s", b[max(0, len(b)-200):])
+	}
+	// 1 MB を超えるものは色なしで、エスケープして最後まで出す
+	b := fetch("/files/notes/big.go", "document").Body.String()
+	if strings.Contains(b, `<span class="kd">`) || strings.Contains(b, "<x>") {
+		t.Errorf("big.go に色が付いているか、エスケープされていない: %.200s", b)
+	}
+	if !strings.Contains(b, "<title>big.go</title>") || !strings.HasSuffix(strings.TrimSpace(b), "</html>") ||
+		strings.Count(b, "// &lt;x&gt;") != highlight.MaxColorSize/7+1 || !strings.Contains(b, "func Big() {}\n</code></pre>") {
+		t.Errorf("big.go のページが欠けている（len = %d）: %.200s", len(b), b[max(0, len(b)-200):])
+	}
+	// テキストでないファイルは読み位置を戻して元のまま返す
+	if b := fetch("/files/notes/data.bin", "document").Body.String(); b != "abc\x00def" {
+		t.Errorf("data.bin = %q", b)
+	}
+	// ヘッダで中身が変わるので、キャッシュが取り違えないようにする
+	if v := fetch("/files/notes/style.css", "style").Header().Get("Vary"); v != "Sec-Fetch-Dest" {
+		t.Errorf("Vary = %q", v)
+	}
+
+	// code に書いた拡張子は検索でも引ける（タイトルはディレクトリからのパス、種別は code）
+	search := get(s, "localhost:8787", "/api/search?q=Hello").Body.String()
+	if !strings.Contains(search, `"title":"PROJ-1/main.go"`) || !strings.Contains(search, `"type":"code"`) {
+		t.Errorf("search = %s", search)
+	}
+	if search := get(s, "localhost:8787", "/api/search?q=echo").Body.String(); strings.Contains(search, "run.sh") {
+		t.Errorf("code に無い拡張子が索引に入っている: %s", search)
+	}
+}
+
+// paths のルートでも、コードのタイトルはディレクトリからのパス（付いた名前は含めない）
+func TestCodeTitleInMultiDirRoot(t *testing.T) {
+	base := t.TempDir()
+	mustWrite(t, filepath.Join(base, "tickets", "PROJ-1", "fix.sql"), "select 1;\n")
+	mustWrite(t, filepath.Join(base, "notes", "a.md"), "# a\n")
+	cfg, err := config.Parse([]byte("data_dir: " + t.TempDir() + "\ncode: [sql]" +
+		"\nroots:\n  - name: work\n    paths:\n      - " + base + "/tickets\n      - " + base + "/notes\n"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	idx, err := indexer.Open(cfg)
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { idx.Close() })
+	if _, err := idx.Sync(context.Background()); err != nil {
+		t.Fatal(err)
+	}
+	s, err := New(context.Background(), cfg, idx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(s.Close)
+
+	search := get(s, "localhost:8787", "/api/search?q=select").Body.String()
+	if !strings.Contains(search, `"title":"PROJ-1/fix.sql"`) || !strings.Contains(search, `"rel_path":"tickets/PROJ-1/fix.sql"`) {
+		t.Errorf("search = %s", search)
+	}
+
+	req := httptest.NewRequest(http.MethodGet, "/files/work/tickets/PROJ-1/fix.sql", nil)
+	req.Host = "localhost:8787"
+	req.Header.Set("Sec-Fetch-Dest", "document")
+	rec := httptest.NewRecorder()
+	s.ServeHTTP(rec, req)
+	if !strings.Contains(rec.Body.String(), "<title>PROJ-1/fix.sql</title>") {
+		t.Errorf("code page = %s", rec.Body.String())
+	}
+}
+
+func TestIsText(t *testing.T) {
+	for name, tt := range map[string]struct {
+		b     string
+		whole bool
+		want  bool
+	}{
+		"ASCII":  {"hello", true, true},
+		"日本語":    {"こんにちは", true, true},
+		"空":      {"", true, true},
+		"NUL":    {"a\x00b", true, false},
+		"不正なバイト": {"caf\xe9", true, false},
+		"途中で切れた文字（途中まで）":   {"ab\xe3\x81", false, true},
+		"途中で切れた文字（ファイル全体）": {"ab\xe3\x81", true, false},
+	} {
+		if got := isText([]byte(tt.b), tt.whole); got != tt.want {
+			t.Errorf("%s: isText = %v, want %v", name, got, tt.want)
+		}
+	}
+}
+
+// 画面・Markdown・コード表示のどれも、同じファビコンを参照する
+func TestFavicon(t *testing.T) {
+	s := newTestServer(t)
+	rec := get(s, "localhost:8787", "/static/favicon.svg")
+	if rec.Code != http.StatusOK || rec.Header().Get("Content-Type") != "image/svg+xml" {
+		t.Fatalf("code = %d type = %q", rec.Code, rec.Header().Get("Content-Type"))
+	}
+	for _, name := range []string{"index.html", "markdown.html", "code-head"} {
+		var b strings.Builder
+		if err := s.tmpl.ExecuteTemplate(&b, name, nil); err != nil {
+			t.Fatalf("%s: %v", name, err)
+		}
+		if !strings.Contains(b.String(), `<link rel="icon" href="/static/favicon.svg"`) {
+			t.Errorf("%s がファビコンを参照していない", name)
+		}
 	}
 }
 

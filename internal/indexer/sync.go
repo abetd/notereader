@@ -192,6 +192,9 @@ func (x *Index) syncDir(ctx context.Context, root config.Root, dir config.Dir,
 			return nil
 		}
 		ext, ok := extract.For(p)
+		if !ok && x.cfg.IsCode(p) {
+			ext, ok = extract.Code{}, true
+		}
 		if !ok {
 			return nil
 		}
@@ -209,7 +212,7 @@ func (x *Index) syncDir(ctx context.Context, root config.Root, dir config.Dir,
 			res.Unchanged++
 			return nil
 		}
-		doc, err := buildDoc(root, rootRel, p, info, ext)
+		doc, err := buildDoc(root, rootRel, rel, p, info, ext)
 		if err != nil {
 			// 読めなかったファイルは既存のエントリを残す
 			slog.Warn("抽出に失敗しました", "path", p, "err", err)
@@ -261,7 +264,8 @@ func signature(info fs.FileInfo) string {
 	return fmt.Sprintf("%d:%d", info.ModTime().UnixNano(), info.Size())
 }
 
-func buildDoc(root config.Root, rel, path string, info fs.FileInfo, ext extract.Extractor) (map[string]any, error) {
+// rootRel はルート全体から見た相対パス、dirRel はディレクトリ（path / paths の 1 件）からの相対パス。
+func buildDoc(root config.Root, rootRel, dirRel, path string, info fs.FileInfo, ext extract.Extractor) (map[string]any, error) {
 	f, err := os.Open(path)
 	if err != nil {
 		return nil, err
@@ -274,13 +278,16 @@ func buildDoc(root config.Root, rel, path string, info fs.FileInfo, ext extract.
 	}
 	filename := filepath.Base(path)
 	title := d.Title
-	if title == "" {
+	if _, isCode := ext.(extract.Code); isCode {
+		// コードはディレクトリからのパス（チケットのディレクトリに置いたコードなどを、どこにあるかで見分けられるように）
+		title = dirRel
+	} else if title == "" {
 		title = strings.TrimSuffix(filename, filepath.Ext(filename))
 	}
 	return map[string]any{
 		FieldType:     ext.Type(),
 		FieldRoot:     root.Name,
-		FieldRelPath:  rel,
+		FieldRelPath:  rootRel,
 		FieldPath:     path,
 		FieldFilename: filename,
 		FieldTitle:    title,

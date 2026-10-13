@@ -15,6 +15,8 @@ import (
 	"unicode/utf8"
 
 	"gopkg.in/yaml.v3"
+
+	"github.com/abetd/notereader/internal/extract"
 )
 
 // DefaultListen は待ち受けアドレスの既定値。ローカル専用のため 127.0.0.1 に限定する。
@@ -102,6 +104,9 @@ type Config struct {
 	// アーカイブ内のファイルも索引には入れ、検索で既定では除くだけ。
 	// 省略時（nil）は DefaultArchive。空のリストを書くとアーカイブを無効にする。
 	Archive []string `yaml:"archive"`
+	// Code はコードとして索引に入れる拡張子（".go" など）。既定は空で、HTML / Markdown だけを索引に入れる。
+	// normalize で小文字・点付きに揃える。
+	Code []string `yaml:"code"`
 
 	// archiveExpr・archiveRe は normalize で Archive から組み立てる（archiveReady で済んだかを表す）
 	archiveReady bool
@@ -261,7 +266,43 @@ func (c *Config) normalize() error {
 		return err
 	}
 	c.archiveReady, c.archiveExpr, c.archiveRe = true, expr, re
+
+	code, err := normalizeCode(c.Code)
+	if err != nil {
+		return err
+	}
+	c.Code = code
 	return nil
+}
+
+var extPattern = regexp.MustCompile(`^\.[a-z0-9_+-]+$`)
+
+// normalizeCode は code の拡張子を小文字・点付きに揃え、重複を除く。
+func normalizeCode(exts []string) ([]string, error) {
+	out := make([]string, 0, len(exts))
+	for _, e := range exts {
+		ext := strings.ToLower(strings.TrimSpace(e))
+		if !strings.HasPrefix(ext, ".") {
+			ext = "." + ext
+		}
+		if !extPattern.MatchString(ext) {
+			return nil, fmt.Errorf("code の拡張子 %q が不正です（.go や go のように拡張子だけを書く）", e)
+		}
+		// HTML / Markdown として索引に入る拡張子は書けない（判定は extract の振り分けに任せ、一覧を写さない）
+		if _, ok := extract.For("x" + ext); ok {
+			return nil, fmt.Errorf("code に %q は書けません（HTML / Markdown として索引に入ります）", e)
+		}
+		if !slices.Contains(out, ext) {
+			out = append(out, ext)
+		}
+	}
+	return out, nil
+}
+
+// IsCode は path の拡張子が code に書かれているか（コードとして索引に入れるか）を返す。
+func (c *Config) IsCode(path string) bool {
+	ext := strings.ToLower(filepath.Ext(path))
+	return ext != "" && slices.Contains(c.Code, ext)
 }
 
 // ArchiveRegexp は、アーカイブ内のファイルの相対パス全体に一致する正規表現を返す

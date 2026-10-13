@@ -1,0 +1,18 @@
+{{/* コード表示。本文（highlight.File の出力）は code-head と code-foot の間にサーバーが流し込む */}}
+{{define "code-head"}}<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>{{.Title}}</title>
+<link rel="icon" href="/static/favicon.svg" type="image/svg+xml">
+<!-- 配色と pre の見た目は Markdown のコードブロックと共用する -->
+<link rel="stylesheet" href="/static/chroma.css">
+<link rel="stylesheet" href="/static/md.css">
+</head>
+<body class="code-body">
+{{end}}
+{{define "code-foot"}}
+</body>
+</html>
+{{end}}
